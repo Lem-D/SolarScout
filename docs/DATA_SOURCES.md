@@ -71,10 +71,52 @@ So Edmonton LiDAR products *do* exist, contrary to what GeoDiscover Alberta sugg
 province's open LiDAR areas (Beaver Hills, Fort McMurray, Fox Creek, RMH Sylvan, Taber,
 Utikuma Lake) exclude Edmonton, but the City published its own derived model.
 
-**Not yet inspected.** If it turns out to be LoD2 with individual roof planes, it supplies real
-per-plane tilt and azimuth and makes the `tilt_assumed` flag unnecessary for pre-2019 buildings
-— a large accuracy win that would reorder the roadmap. Needs GDAL/fiona to read. Worth a look
-before investing in orientation heuristics.
+**Inspected 2026-10-08. It is LoD2, and it changes the roadmap.**
+
+One layer, `Building_MP_Merge`: 383,329 multipatch features in EPSG:3776, fields
+`PRESEG_FID`, `District`, `ROOFFORM`. Readable with `fiona` + GDAL's `OpenFileGDB` driver,
+straight out of the zip via `/vsizip/` — no extraction needed. Geometry arrives as a
+`GeometryCollection` of `MultiPolygon`s whose parts are triangles, so faces must be
+flattened out of that nesting before use.
+
+Each building carries its real faces: walls, a ground polygon at the base elevation, and
+**individual roof planes**. Newell's method on each triangle gives a normal, and from the
+normal come measured tilt and azimuth. A typical gable resolves into two opposed slopes —
+e.g. two planes at 19.4° facing aspect +7.7° and −172.3°. Median 20 roof faces per
+building.
+
+`ROOFFORM` is a per-building classification. In Webber Greens it is `Gable` (1193) and
+`Flat` (9).
+
+### What this says about `orientation.py`
+
+Measured against the 1134 Webber Greens buildings that match our output by centroid:
+
+| | assumed | measured | verdict |
+| --- | --- | --- | --- |
+| Pitch | 22° | median **20.0°** (p10 10.3, p90 25.4) | good assumption |
+| Flat roofs | **203** of 1134 | **9** of 1202 | 22x over-classified |
+| Aspect | ridge from bounding rectangle | median error **88°**; 44 % within 30° | no better than chance |
+| Usable area | 90,203 m² total | 40,699 m² within 45° of south | ~2.2x optimistic in aggregate |
+
+The pitch assumption holds. **The ridge heuristic does not.** A median aspect error of 88°
+is what uniform guessing would produce, so the minimum-rotated-rectangle premise — long axis
+of the bounding box approximates the ridge — simply does not hold for these buildings. And
+the roofs we wrongly call flat are handed the *optimal* tilt, which is why they are the only
+ones reaching the green band.
+
+The 40,699 m² figure is not the whole usable resource: east- and west-facing planes still
+yield ~885 kWh/kWp/yr against ~1109 due south, so they are worth having. The point is that
+our number assumes half of every footprint faces usefully south, and the measured model says
+otherwise.
+
+This dataset supersedes `orientation.py` for every pre-2019 building and removes the need for
+`pitched_face_share` and the slope correction too, since per-plane area is measured directly.
+It is static 2019, so newer buildings still need the heuristic as a fallback.
+
+**Licence is not stated** on the portal for this dataset either (same gap as the orthophotos).
+This is derived vector geometry rather than imagery for model training, and we already use
+Rooflines from the same portal, but the gap should be closed before launch.
 
 Separately, `building_height` on every roofline enables **inter-building shading** (a tall
 building south of a short one) without any point cloud. That is a cheap partial answer to the
@@ -155,7 +197,7 @@ This changes the model:
 | 2026-10-08 | Footprints `6n9r-ddf8` bbox query | 1102 features, `area` column all zero |
 | 2026-10-08 | Neighbourhood boundary `xu6q-xcmj` | Webber Greens polygon, 44 vertices |
 | 2026-10-08 | Orthophoto 2024 `5j7q-2n5f` | 7.5 cm, licence "See Terms of Use" — **unresolved** |
-| 2026-10-08 | 3D Buildings `78sz-qcfr` | 225 MB gdb, LiDAR-derived — **not inspected** |
+| 2026-10-08 | 3D Buildings `78sz-qcfr` | 225 MB gdb, LiDAR-derived — **inspected: LoD2 with real roof planes** |
 | 2026-10-08 | Full pipeline run, Webber Greens | 1196 rooflines fetched, 1129 roofs after the 20 m² filter (66 too small, 1 unusable geometry); 42 PVGIS orientation groups; `roofs.geojson` 0.8 MB |
 | 2026-10-08 | PVGIS yields across the region | 886–1174 kWh/kWp/yr. Pitched roofs mean 967, roofs treated as flat 1130 |
 | 2026-10-08 | Socrata `:id` on `jpxi-a9a5` | Returned when named in `$select`; used as the stable roof id |
@@ -164,7 +206,7 @@ This changes the model:
 
 **201 of 1129 roofs (18 %) are classified flat** by `orientation.py`, because their outline
 is squarer than `SQUARENESS_FLAT_THRESHOLD` (1.15) and no ridge direction can be read from
-it. Those roofs are then given the *optimal* tilt, which is the most favourable assumption
+it. **Confirmed wrong by the 3D model above: only 9 buildings here are actually flat.** Those roofs are then given the *optimal* tilt, which is the most favourable assumption
 in the whole model: they average 1130 kWh/kWp/yr against 967 for the pitched ones, and they
 are the only roofs that reach the green payback band at the default price. In a 1990s
 detached-housing neighbourhood most of them are hipped roofs, not flat ones. This is

@@ -227,9 +227,14 @@ MapLibre's (`web/src/draw.js`).
 - Hosting for larger regions: one GeoJSON file or vector tiles (PMTiles)? One file is
   comfortable at this size — 1129 roofs is 0.8 MB — so the question is open only for a
   region an order of magnitude bigger.
-- **Near-square roofs are treated as flat and given the optimal tilt**, which is the most
-  favourable assumption in the model, and 201 of 1129 roofs (18 %) take that path. In a
-  1990s detached-housing neighbourhood most of them are far more likely to be hipped roofs
-  whose ridge direction simply cannot be read from the outline. Either raise
-  `SQUARENESS_FLAT_THRESHOLD`, or give ambiguous roofs a pitched penalty rather than the
-  optimum. Currently flagged in the UI rather than decided.
+- **Replace `orientation.py` with the LoD2 model?** Edmonton's 3D Buildings
+  (`78sz-qcfr`) turns out to carry individual roof planes with measured tilt and azimuth
+  for every pre-2019 building. Measured against it, the assumed 22° pitch holds (median
+  20.0°) but the ridge heuristic does not: median aspect error 88°, which is what random
+  guessing would give, and 203 roofs are called flat against 9 that actually are. Stage 5
+  should read planes from the geodatabase and keep the heuristic only as the fallback for
+  buildings newer than 2019. This also retires `pitched_face_share` and the slope
+  correction, since per-plane area is measured. See `docs/DATA_SOURCES.md`.
+- Per-plane modelling follows from that: a roof becomes several planes, each with its own
+  orientation group, rather than one aspect per building. That changes the data model
+  (`roofs.geojson` gains a plane list) and the roof panel.

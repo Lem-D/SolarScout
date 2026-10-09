@@ -1,0 +1,97 @@
+# Webber Greens, Edmonton, Alberta — first build region.
+# Provenance and caveats for every value here: docs/DATA_SOURCES.md
+#
+# Values marked PLACEHOLDER are scoping estimates, not sourced figures. They must be
+# replaced with primary sources (AUC rate schedules, NRCan emissions factors, real installer
+# quotes) and cited in `sources` before this map is shown to anyone.
+
+name: webber-greens
+display_name: Webber Greens, Edmonton
+centre: [-113.676695, 53.530309]
+
+# From Neighbourhood Boundaries 2019 (Socrata xu6q-xcmj), neighbourhood id 4740.
+# 1634 m E-W x 801 m N-S, ~1.3 km2, ~1196 buildings.
+bbox: [-113.689033, 53.526687, -113.664357, 53.533931]
+
+# Statistics Canada / Alberta: 3TM114-83 is the municipal CRS, but UTM 12N is the
+# convenient metric CRS for area work and is what the pipeline reprojects to.
+metric_crs: "EPSG:32612"
+
+footprints:
+  source: edmonton_rooflines
+  socrata_domain: data.edmonton.ca
+  socrata_id: jpxi-a9a5          # Rooflines 2019: has real area AND building_height
+  min_area_m2: 20                # drop sheds and garages
+
+imagery:
+  source: edmonton_orthophoto_2024
+  socrata_id: 5j7q-2n5f
+  resolution_m: 0.075
+  # BLOCKED: licence reads only "See Terms of Use". Confirm it permits model input
+  # before using these tiles for segmentation. See docs/DATA_SOURCES.md.
+  licence_cleared_for_model_input: false
+
+solar:
+  # Verified 2026-10-08: PVGIS auto-selects PVGIS-NSRDB at this latitude.
+  pvgis_endpoint: "https://re.jrc.ec.europa.eu/api/v5_2/PVcalc"
+  loss_pct: 14
+  # Typical local pitch is 4/12-6/12 (18-27 deg); 22 deg is ~94% of the 43 deg optimum.
+  assumed_tilt_deg: 22
+  optimal_tilt_deg: 43
+  # PLACEHOLDER: not a sourced figure. Edmonton gets weeks of snow cover and loss=14
+  # does not model it. Steep tilt sheds snow.
+  snow_loss_share: 0.04
+
+# Stage 4 reductions from building outline to mountable panel area. All three are
+# assumptions, not measurements, and every one is echoed into region.json so the
+# assumptions page can show it. See pipeline/usable_area.py for the reasoning.
+usable_area:
+  setback_m: 0.5              # panels cannot sit on the roof edge
+  # A pitched roof has two faces and only the south-facing one is worth using. Not in
+  # DESIGN.md; without it every pitched roof is overstated by ~2x.
+  pitched_face_share: 0.5
+  # Flat roofs lose area to inter-row spacing instead: rows racked at the optimal 43 deg
+  # shade the row behind them. PLACEHOLDER: a rule of thumb, not a sourced figure.
+  flat_row_packing: 0.7
+  min_usable_area_m2: 8.0
+
+economics:
+  currency: CAD
+  # PLACEHOLDER. Alberta is deregulated; this should be the all-in marginal rate from an
+  # AUC schedule, not a retailer's advertised energy rate.
+  retail_price_per_kwh: 0.16
+  # Micro-Generation Regulation (AR 27/2008): systems <150 kW are credited at the full
+  # retail rate. Deliberately equal to retail_price_per_kwh.
+  export_price_per_kwh: 0.16
+  # Inert in this region while export == retail (see docs/DATA_SOURCES.md). Kept for
+  # cross-region parity only.
+  self_consumption_share: 0.6
+  # PLACEHOLDER: Alberta residential installs, needs real quotes. CAD per watt.
+  installed_cost_per_watt: 2.50
+  # PLACEHOLDER: Alberta's grid is carbon-intensive by Canadian standards, but the 2024
+  # coal phase-out moved this a lot and recently. Needs a dated NRCan/AESO source.
+  grid_emissions_kg_per_kwh: 0.44
+  panel_kwp_per_m2: 0.2
+  degradation_per_year: 0.005
+  min_system_kwp: 1.5
+  # Not in DESIGN.md's original region.json; rebates move payback more than most sliders.
+  incentives:
+    # e.g. {name: ..., type: rebate|loan, amount: ..., source: ...}
+    []
+
+payback_bands:
+  green_max_years: 8
+  yellow_max_years: 15
+
+sources:
+  # Every PLACEHOLDER above needs an entry here before launch.
+  footprints: "https://data.edmonton.ca/Geospatial-Boundaries/City-of-Edmonton-Rooflines-as-of-2019-/jpxi-a9a5"
+  imagery: "https://data.edmonton.ca/Thematic-Features/Orthophoto-Repository-2024/5j7q-2n5f"
+  boundary: "https://data.edmonton.ca/resource/xu6q-xcmj.json"
+  solar: "https://re.jrc.ec.europa.eu/api/v5_2/PVcalc (PVGIS-NSRDB, 2005-2015)"
+  retail_price_per_kwh: null       # TODO: AUC rate schedule
+  export_price_per_kwh: null       # TODO: Micro-Generation Regulation AR 27/2008
+  installed_cost_per_watt: null    # TODO
+  grid_emissions_kg_per_kwh: null  # TODO: NRCan / AESO, with year
+
+attribution: "Building geometry and imagery © City of Edmonton, Open Data. Solar resource: PVGIS, European Commission JRC."

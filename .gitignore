@@ -1,0 +1,25 @@
+# Raw and intermediate pipeline data: regenerable, often huge (orthophoto tiles
+# are ~286 MB each, the 3D Buildings gdb is 225 MB). Never commit.
+data/
+
+# Pipeline output is copied into web/public/data/<region>/ by the export stage.
+# Keep the committed copy small; drop anything large here.
+web/public/data/**/*.tif
+web/public/data/**/*.tiff
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+node_modules/
+dist/
+.vite/
+
+.env
+.env.local
+*.local
+
+.DS_Store
